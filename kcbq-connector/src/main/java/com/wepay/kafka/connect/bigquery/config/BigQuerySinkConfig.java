@@ -301,7 +301,7 @@ public class BigQuerySinkConfig extends AbstractConfig {
           "Whether to automatically create the given bucket, if it does not exist. " +
                   "Only relevant if enableBatchLoad is configured.";
 
-  public static final String ALLOW_NEW_BIGQUERY_FIELDS_CONFIG =                    "allowNewBigQueryFields";
+  public static final String ALLOW_NEW_BIGQUERY_FIELDS_CONFIG =                    "allowNewBQFields";
   private static final ConfigDef.Type ALLOW_NEW_BIGQUERY_FIELDS_TYPE =             ConfigDef.Type.BOOLEAN;
   public static final Boolean ALLOW_NEW_BIGQUERY_FIELDS_DEFAULT =                  false;
   private static final ConfigDef.Importance ALLOW_NEW_BIGQUERY_FIELDS_IMPORTANCE = ConfigDef.Importance.MEDIUM;
@@ -983,7 +983,11 @@ public class BigQuerySinkConfig extends AbstractConfig {
    * @return a {@link RecordConverter} for BigQuery.
    */
   public RecordConverter<Map<String, Object>> getRecordConverter() {
-    return new BigQueryRecordConverter(getBoolean(CONVERT_DOUBLE_SPECIAL_VALUES_CONFIG), getBoolean(CONVERT_DEBEZIUM_TIMESTAMP_TO_INTEGER_CONFIG));
+    return new BigQueryRecordConverter(
+        getBoolean(CONVERT_DOUBLE_SPECIAL_VALUES_CONFIG),
+        getBoolean(CONVERT_DEBEZIUM_TIMESTAMP_TO_INTEGER_CONFIG),
+        getFieldTypeOverrides()
+    );
   }
 
   /**

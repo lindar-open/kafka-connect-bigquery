@@ -114,7 +114,7 @@ public class BigQuerySinkConfigTest {
    * Test the default for the field names is not present.
    */
   @Test
-  public void testEmptyClusteringFieldNames() {
+  public void testEmptyclusteringFieldName() {
     Map<String, String> configProperties = propertiesFactory.getProperties();
     BigQuerySinkConfig testConfig = new BigQuerySinkConfig(configProperties);
     assertFalse(testConfig.getClusteringPartitionFieldNames().isPresent());
@@ -138,7 +138,7 @@ public class BigQuerySinkConfigTest {
    * Test the field names being non-empty and the partitioning field exists works correctly.
    */
   @Test
-  public void testClusteringFieldNames() {
+  public void testclusteringFieldName() {
     Map<String, String> configProperties = propertiesFactory.getProperties();
     configProperties.put(BigQuerySinkConfig.BIGQUERY_TIMESTAMP_PARTITION_FIELD_NAME_CONFIG, "name");
     configProperties.put(BigQuerySinkConfig.BIGQUERY_PARTITION_DECORATOR_CONFIG, "false");
