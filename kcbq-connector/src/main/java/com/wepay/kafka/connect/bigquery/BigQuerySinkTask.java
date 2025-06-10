@@ -22,6 +22,7 @@ package com.wepay.kafka.connect.bigquery;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
 import com.google.cloud.bigquery.InsertAllRequest.RowToInsert;
+import com.google.cloud.bigquery.LegacySQLTypeName;
 import com.google.cloud.bigquery.StandardTableDefinition;
 import com.google.cloud.bigquery.Table;
 import com.google.cloud.bigquery.TableId;
@@ -80,6 +81,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 import static com.wepay.kafka.connect.bigquery.utils.TableNameUtils.intTable;
 
@@ -127,6 +129,9 @@ public class BigQuerySinkTask extends SinkTask {
   private int taskId;
 
   private ErrantRecordHandler errantRecordHandler;
+  private Pattern batchLoadRegex;
+
+  private Map<String, LegacySQLTypeName> fieldTypeOverrides;
 
   /**
    * Create a new BigquerySinkTask.
@@ -277,7 +282,17 @@ public class BigQuerySinkTask extends SinkTask {
         PartitionedTableId table = getRecordTable(record);
         if (!tableWriterBuilders.containsKey(table)) {
           TableWriterBuilder tableWriterBuilder;
-          if (config.getList(BigQuerySinkConfig.ENABLE_BATCH_CONFIG).contains(record.topic())) {
+          boolean shouldBatchLoad = false;
+          
+          // Check if topic should be batch loaded based on either list or regex
+          List<String> batchTopics = config.getList(BigQuerySinkConfig.ENABLE_BATCH_CONFIG);
+          if (!batchTopics.isEmpty()) {
+            shouldBatchLoad = batchTopics.contains(record.topic());
+          } else if (batchLoadRegex != null) {
+            shouldBatchLoad = batchLoadRegex.matcher(record.topic()).matches();
+          }
+
+          if (shouldBatchLoad) {
             String topic = record.topic();
             long offset = record.kafkaOffset();
             String gcsBlobName = topic + "_" + uuid + "_" + Instant.now().toEpochMilli() + "_" + offset;
@@ -445,17 +460,19 @@ public class BigQuerySinkTask extends SinkTask {
     boolean allowReqFieldRelaxation = config.getBoolean(BigQuerySinkConfig.ALLOW_BIGQUERY_REQUIRED_FIELD_RELAXATION_CONFIG);
     boolean allowSchemaUnionization = config.getBoolean(BigQuerySinkConfig.ALLOW_SCHEMA_UNIONIZATION_CONFIG);
     boolean sanitizeFieldNames = config.getBoolean(BigQuerySinkConfig.SANITIZE_FIELD_NAME_CONFIG);
+    fieldTypeOverrides = config.getFieldTypeOverrides();
     return new SchemaManager(schemaRetriever, schemaConverter, getBigQuery(),
                              allowNewBQFields, allowReqFieldRelaxation, allowSchemaUnionization,
                              sanitizeFieldNames,
                              kafkaKeyFieldName, kafkaDataFieldName,
-                             timestampPartitionFieldName, partitionExpiration, clusteringFieldName, timePartitioningType);
+                             timestampPartitionFieldName, partitionExpiration, clusteringFieldName, timePartitioningType,
+                             fieldTypeOverrides);
   }
 
   private BigQueryWriter getBigQueryWriter(ErrantRecordHandler errantRecordHandler) {
     boolean autoCreateTables = config.getBoolean(BigQuerySinkConfig.TABLE_CREATE_CONFIG);
-    boolean allowNewBigQueryFields = config.getBoolean(BigQuerySinkConfig.ALLOW_NEW_BIGQUERY_FIELDS_CONFIG);
-    boolean allowRequiredFieldRelaxation = config.getBoolean(BigQuerySinkConfig.ALLOW_BIGQUERY_REQUIRED_FIELD_RELAXATION_CONFIG);
+    boolean allowNewBQFields = config.getBoolean(BigQuerySinkConfig.ALLOW_NEW_BIGQUERY_FIELDS_CONFIG);
+    boolean allowBQRequiredFieldRelaxation = config.getBoolean(BigQuerySinkConfig.ALLOW_BIGQUERY_REQUIRED_FIELD_RELAXATION_CONFIG);
     int retry = config.getInt(BigQuerySinkConfig.BIGQUERY_RETRY_CONFIG);
     long retryWait = config.getLong(BigQuerySinkConfig.BIGQUERY_RETRY_WAIT_CONFIG);
     BigQuery bigQuery = getBigQuery();
@@ -467,7 +484,7 @@ public class BigQuerySinkTask extends SinkTask {
                                             autoCreateTables,
                                             mergeBatches.intermediateToDestinationTables(),
                                             errantRecordHandler);
-    } else if (autoCreateTables || allowNewBigQueryFields || allowRequiredFieldRelaxation) {
+    } else if (autoCreateTables || allowNewBQFields || allowBQRequiredFieldRelaxation) {
       return new AdaptiveBigQueryWriter(bigQuery,
                                         getSchemaManager(),
                                         retry,
@@ -576,6 +593,12 @@ public class BigQuerySinkTask extends SinkTask {
     topic2TableMap = config.getTopic2TableMap().orElse(null);
     remainingRetries = config.getInt(BigQuerySinkConfig.MAX_RETRIES_CONFIG);
     enableRetries = config.getBoolean(BigQuerySinkConfig.ENABLE_RETRIES_CONFIG);
+
+    // Initialize batch load regex if configured
+    String batchRegex = config.getString(BigQuerySinkConfig.ENABLE_BATCH_REGEX_CONFIG);
+    if (batchRegex != null && !batchRegex.isEmpty()) {
+      batchLoadRegex = Pattern.compile(batchRegex);
+    }
   }
 
   private void startGCSToBQLoadTask() {

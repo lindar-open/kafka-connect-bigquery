@@ -78,6 +78,7 @@ public class SchemaManager {
   private final ConcurrentMap<TableId, Object> tableCreateLocks;
   private final ConcurrentMap<TableId, Object> tableUpdateLocks;
   private final ConcurrentMap<TableId, com.google.cloud.bigquery.Schema> schemaCache;
+  private final Map<String, LegacySQLTypeName> fieldTypeOverrides;
 
   /**
    * @param schemaRetriever Used to determine the Kafka Connect Schema that should be used for a
@@ -112,7 +113,8 @@ public class SchemaManager {
       Optional<String> timestampPartitionFieldName,
       Optional<Long> partitionExpiration,
       Optional<List<String>> clusteringFieldName,
-      Optional<TimePartitioning.Type> timePartitioningType) {
+      Optional<TimePartitioning.Type> timePartitioningType,
+      Map<String, LegacySQLTypeName> fieldTypeOverrides) {
     this(
         schemaRetriever,
         schemaConverter,
@@ -130,7 +132,8 @@ public class SchemaManager {
         false,
         new ConcurrentHashMap<>(),
         new ConcurrentHashMap<>(),
-        new ConcurrentHashMap<>());
+        new ConcurrentHashMap<>(),
+        fieldTypeOverrides);
   }
 
   private SchemaManager(
@@ -150,7 +153,8 @@ public class SchemaManager {
       boolean intermediateTables,
       ConcurrentMap<TableId, Object> tableCreateLocks,
       ConcurrentMap<TableId, Object> tableUpdateLocks,
-      ConcurrentMap<TableId, com.google.cloud.bigquery.Schema> schemaCache) {
+      ConcurrentMap<TableId, com.google.cloud.bigquery.Schema> schemaCache,
+      Map<String, LegacySQLTypeName> fieldTypeOverrides) {
     this.schemaRetriever = schemaRetriever;
     this.schemaConverter = schemaConverter;
     this.bigQuery = bigQuery;
@@ -168,6 +172,7 @@ public class SchemaManager {
     this.tableCreateLocks = tableCreateLocks;
     this.tableUpdateLocks = tableUpdateLocks;
     this.schemaCache = schemaCache;
+    this.fieldTypeOverrides = fieldTypeOverrides;
   }
 
   public SchemaManager forIntermediateTables() {
@@ -188,7 +193,8 @@ public class SchemaManager {
         true,
         tableCreateLocks,
         tableUpdateLocks,
-        schemaCache
+        schemaCache,
+        fieldTypeOverrides
     );
   }
 
